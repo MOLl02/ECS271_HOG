@@ -1,71 +1,84 @@
 import random
 import os
 import cv2
-from skimage.io import imread, imsave, imshow
-from skimage.feature import hog
-from skimage.color import rgb2gray
 import numpy as np
 import matplotlib.pyplot as plt
+import datapreprocess
+from network import train, test
+from torch.utils.data import DataLoader
 
-'''
-1. 将 train_64*128_H96 和 test_64*128_H96 中 pos 和 neg 中的图像均设置成相同的大小，即 64*128 像素。
-    对于正样本 pos 直接使用中心为 64x128 像素的窗口
-    对负样本 neg 每个原始负样本随机生成 10 个窗口
-2. 截取完成后直接都提取 hog 特征，并打好标签
 
-以 .npy 格式保存 在 
-./feature/
-    test.npy 5662*1780 （1126 + 453*10）
-    train.npy 14596*3780 (2416 + 1218*10)
-'''
+def slide_window(image, window_size=(64, 128), step_size=32, output_folder='./slide/'):
+    """
+    This function slides a window over an image, ensures that the window does not exceed the image boundaries,
+    and saves each window as a separate image along with a copy of the original image that shows the specific window
+    with a rectangle. It returns two kinds of images:
+    the original image with drawn rectangles, and the saved window images each with its corresponding original image.
 
-def solve(mode):
-    print("START")
-    pos_img_path = './INRIAPerson/{}_64x128_H96/pos/'.format(mode)
-    neg_img_path = './INRIAPerson/{}_64x128_H96/neg/'.format(mode)
-    save_path = "./feature/"
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-    hog_feature = []
-    # /pos
-    for file in os.listdir(pos_img_path):
-        if file == '.DS_Store':
-            continue
-        img = imread(pos_img_path+file)[:, :, :3]  # Remove Alpha channel
-        center = img.shape[0] // 2, img.shape[1] // 2
-        crop_img = img[center[0]-64:center[0]+64, center[1]-32:center[1]+32, :]
-        fd = hog(rgb2gray(crop_img), orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2))
-        hog_feature.append(fd)
-    pos_num = len(hog_feature)
-    # /neg
-    for file in os.listdir(neg_img_path):
-        img = imread(neg_img_path + file)
-        # 图片大小应该能能至少包含一个 64 * 128 的窗口
-        if img.shape[0] >= 128 and img.shape[1] >= 64:
-            for i in range(10):
-                x = random.randint(0, img.shape[0] - 128)  # 左上角x坐标
-                y = random.randint(0, img.shape[1] - 64)  # 左上角y坐标
-                crop_img = img[x:x + 128, y:y + 64, :]
-                fd = hog(rgb2gray(crop_img), orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2))
-                hog_feature.append(fd)
-    hog_feature = np.array(hog_feature)
-    label = np.zeros(hog_feature.shape[0])
-    print(hog_feature.shape[0], pos_num)
-    label[0:pos_num] = 1
-    data = {'X':hog_feature, 'Y':label}
-    np.save(save_path + mode + '.npy', data)
-    che = np.load(save_path + mode + '.npy', allow_pickle=True)
-    che = che.item()
-    X = che['X']
-    Y = che['Y']
-    # print(X.shape)
-    # print(Y.shape)
-    if (X == hog_feature).all() and (Y == label).all():
-        print("check YES")
+    :param image: The image over which the window will slide.
+    :param window_size: The size of the sliding window (width, height).
+    :param step_size: The step size for sliding the window.
+    :param output_folder: The folder where the window images and their corresponding originals will be saved.
+    :return: The original image with rectangles and paths to the first few saved window images and their originals for example.
+    """
+    import os
+
+    saved_window_paths = []
+    saved_original_paths = []
+    window_count = 0
+
+    # Create the output folder if it does not exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    for y in range(0, image.shape[0] - window_size[1] + 1, step_size):
+        for x in range(0, image.shape[1] - window_size[0] + 1, step_size):
+            # Draw a rectangle on the copy of the original image
+            img_with_current_rectangle = image.copy()
+            cv2.rectangle(img_with_current_rectangle, (x, y), (x + window_size[0], y + window_size[1]), (0, 255, 0), 2)
+
+            # Extract the window
+            window = image[y:y + window_size[1], x:x + window_size[0]]
+
+            # Save the window image and its corresponding original with rectangle
+            window_path = os.path.join(output_folder, f'window_{window_count}.png')
+            original_with_rectangle_path = os.path.join(output_folder, f'original_with_window_{window_count}.png')
+            cv2.imwrite(window_path, cv2.cvtColor(window, cv2.COLOR_RGB2BGR))
+            cv2.imwrite(original_with_rectangle_path, cv2.cvtColor(img_with_current_rectangle, cv2.COLOR_RGB2BGR))
+            saved_window_paths.append(window_path)
+            saved_original_paths.append(original_with_rectangle_path)
+            window_count += 1
+
+    return saved_window_paths[:5], saved_original_paths[:5]
 
 
 if __name__ == '__main__':
-    solve('train')
-    solve('test')
+    #solve('train')
+    #solve('test')
     #result = np.load("./feature/train.npy", allow_pickle=True)
     #print(result)
+
+    # for i, data in enumerate(result):
+    #     # get the inputs
+    #     inputs, labels = data
+    #     print(inputs,labels)
+    #     if i == 1:
+    #         break
+
+    # Apply the function and get the list of window images
+    #random_image = imread('./INRIAPerson/Test/pos/crop001520.png')
+    #slide_window(random_image)
+    #print(random_image.shape)
+
+    print('Start')
+
+    train_data = np.load("./feature/train.npy", allow_pickle=True)
+    test_data = np.load("./feature/test.npy", allow_pickle=True)
+    # Assuming 'data' is your dataset variable
+    train_dataset = datapreprocess.CustomDataset(train_data)
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    test_dataset = datapreprocess.CustomDataset(test_data)
+    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=True)
+    trained_net = train(train_loader)
+    test(test_loader, trained_net)
+
