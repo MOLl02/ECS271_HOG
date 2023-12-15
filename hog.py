@@ -5,7 +5,8 @@ from skimage.io import imread, imsave, imshow
 from skimage.feature import hog
 from skimage.color import rgb2gray
 import numpy as np
-import matplotlib.pyplot as plt
+from custom_hog import custom_hog
+
 
 '''
 1. 将 train_64*128_H96 和 test_64*128_H96 中 pos 和 neg 中的图像均设置成相同的大小，即 64*128 像素。
@@ -36,6 +37,9 @@ def solve(mode):
         #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) # Covert from BGR to RGB
         center = img.shape[0] // 2, img.shape[1] // 2
         crop_img = img[center[0]-64:center[0]+64, center[1]-32:center[1]+32, :]
+        # Using custom HOG
+        #fd = custom_hog(rgb2gray(crop_img[:, :, :3]))
+
         fd = hog(rgb2gray(crop_img), orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2))
         hog_feature.append(fd)
     pos_num = len(hog_feature)
@@ -49,6 +53,9 @@ def solve(mode):
                 x = random.randint(0, img.shape[0] - 128)  # 左上角x坐标
                 y = random.randint(0, img.shape[1] - 64)  # 左上角y坐标
                 crop_img = img[x:x + 128, y:y + 64, :]
+                # Using custom HOG
+                #fd = custom_hog(rgb2gray(crop_img[:, :, :3]))
+
                 fd = hog(rgb2gray(crop_img), orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2))
                 hog_feature.append(fd)
     hog_feature = np.array(hog_feature)

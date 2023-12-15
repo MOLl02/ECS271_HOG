@@ -209,7 +209,7 @@ def custom_hog_svm():
                 x = random.randint(0, img.shape[0] - 128)  # 左上角x坐标
                 y = random.randint(0, img.shape[1] - 64)  # 左上角y坐标
                 crop_img = img[x:x + 128, y:y + 64, :]
-                features.append(color.rgb2gray((crop_img)[:, :, :3]))
+                features.append(color.rgb2gray(crop_img[:, :, :3]))
                 labels.append(-1)
     features = np.array(features)
     labels = np.array(labels)
