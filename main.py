@@ -1,58 +1,27 @@
 import random
 import os
 import cv2
+from sklearn import svm
+from sklearn.metrics import accuracy_score
 import numpy as np
 import matplotlib.pyplot as plt
+from skimage.io import imread, imsave, imshow
+from skimage.feature import hog
+from skimage.color import rgb2gray
+import time
+from joblib import dump, load
 import datapreprocess
-from network import train, test
+from hog_network import train, test, grid_search
+from window_network import train as train_window, test as test_window, train_overlapping, test_overlapping, plot_metrics
 from torch.utils.data import DataLoader
-
-
-def slide_window(image, window_size=(64, 128), step_size=32, output_folder='./slide/'):
-    """
-    This function slides a window over an image, ensures that the window does not exceed the image boundaries,
-    and saves each window as a separate image along with a copy of the original image that shows the specific window
-    with a rectangle. It returns two kinds of images:
-    the original image with drawn rectangles, and the saved window images each with its corresponding original image.
-
-    :param image: The image over which the window will slide.
-    :param window_size: The size of the sliding window (width, height).
-    :param step_size: The step size for sliding the window.
-    :param output_folder: The folder where the window images and their corresponding originals will be saved.
-    :return: The original image with rectangles and paths to the first few saved window images and their originals for example.
-    """
-    import os
-
-    saved_window_paths = []
-    saved_original_paths = []
-    window_count = 0
-
-    # Create the output folder if it does not exist
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    for y in range(0, image.shape[0] - window_size[1] + 1, step_size):
-        for x in range(0, image.shape[1] - window_size[0] + 1, step_size):
-            # Draw a rectangle on the copy of the original image
-            img_with_current_rectangle = image.copy()
-            cv2.rectangle(img_with_current_rectangle, (x, y), (x + window_size[0], y + window_size[1]), (0, 255, 0), 2)
-
-            # Extract the window
-            window = image[y:y + window_size[1], x:x + window_size[0]]
-
-            # Save the window image and its corresponding original with rectangle
-            window_path = os.path.join(output_folder, f'window_{window_count}.png')
-            original_with_rectangle_path = os.path.join(output_folder, f'original_with_window_{window_count}.png')
-            cv2.imwrite(window_path, cv2.cvtColor(window, cv2.COLOR_RGB2BGR))
-            cv2.imwrite(original_with_rectangle_path, cv2.cvtColor(img_with_current_rectangle, cv2.COLOR_RGB2BGR))
-            saved_window_paths.append(window_path)
-            saved_original_paths.append(original_with_rectangle_path)
-            window_count += 1
-
-    return saved_window_paths[:5], saved_original_paths[:5]
-
+import torch
+from skimage.transform import resize
+from windowpreprocess import process_folder, process_all_entries, process_single_entry, extract_window
+from pyramid_img import act, detect
+from custom_hog import custom_hog_svm
 
 if __name__ == '__main__':
+    """Extract HOG"""
     #solve('train')
     #solve('test')
     #result = np.load("./feature/train.npy", allow_pickle=True)
@@ -72,13 +41,82 @@ if __name__ == '__main__':
 
     print('Start')
 
-    train_data = np.load("./feature/train.npy", allow_pickle=True)
-    test_data = np.load("./feature/test.npy", allow_pickle=True)
-    # Assuming 'data' is your dataset variable
-    train_dataset = datapreprocess.CustomDataset(train_data)
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    test_dataset = datapreprocess.CustomDataset(test_data)
-    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=True)
-    trained_net = train(train_loader)
-    test(test_loader, trained_net)
+    """Train NN for HOG"""
+    # train_data = np.load("./feature/train.npy", allow_pickle=True)
+    # test_data = np.load("./feature/test.npy", allow_pickle=True)
+    # # Assuming 'data' is your dataset variable
+    # train_dataset = datapreprocess.CustomDataset(train_data)
+    # train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    # test_dataset = datapreprocess.CustomDataset(test_data)
+    # test_loader = DataLoader(test_dataset, batch_size=64, shuffle=True)
+    # trained_net, accuracys= train(train_loader, 20, 0.001)
+    # test(test_loader, trained_net)
+    # plot_metrics(accuracys)
+    # torch.save(trained_net, 'hog_nnmodel.pth')
+
+    """Grid search"""
+    # Define the range of epochs and learning rates to try
+    # epochs_list = list(range(5, 16))  # This will create a list from 5 to 20
+    # lr_list = [0.001, 0.01, 0.1, 0.5, 1]  # Example values for learning rates
+    # best_accuracy, best_params = grid_search(train_loader, test_loader, epochs_list, lr_list)
+    # print(best_accuracy, best_params)
+
+    """Extract window size"""
+    # print('Start extracting window')
+    # input_path = './INRIAPerson/Train/annotations/'
+    # output_path = './feature/window_test.npy'
+    # extract_window(input_path, output_path)
+    # train_window = np.load("./feature/window_train.npy", allow_pickle=True)
+
+    """ Train window size"""
+    # train_data = np.load("./feature/window_train.npy", allow_pickle=True)
+    # test_data = np.load("./feature/window_test.npy", allow_pickle=True)
+    #
+    # train_dataset = datapreprocess.CustomDataset(train_data)
+    # train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+    # test_dataset = datapreprocess.CustomDataset(test_data)
+    # test_loader = DataLoader(test_dataset, batch_size=8, shuffle=True)
+    #
+    # trained_net = train_window(train_loader, 100, 0.001)
+    # test_window(test_loader, trained_net)
+
+    """extract window and overlapping"""
+    # train_overlap_data = process_folder('./INRIAPerson/Train/annotations/')
+    # train_all_overlaps, train_all_hog_features = process_all_entries(train_overlap_data)
+    # np.savez('./feature/train_data.npz', features=train_all_hog_features, labels=train_all_overlaps)
+    # test_overlap_data = process_folder('./INRIAPerson/Test/annotations/')
+    # test_all_overlaps, test_all_hog_features = process_all_entries(test_overlap_data)
+    # np.savez('./feature/test_data.npz', features=test_all_hog_features, labels=test_all_overlaps)
+
+    """Pyramid Image Iteration"""
+    # act('./INRIAPerson/Test/pos/person_012.png')
+
+    """Train network for overlapping"""
+    # traindata_overlapping = datapreprocess.OverlappingDataset('./feature/train_data.npz')
+    # testdata_overlapping = datapreprocess.OverlappingDataset('./feature/test_data.npz')
+    # train_loader = DataLoader(traindata_overlapping, batch_size=64, shuffle=True)
+    # test_loader = DataLoader(testdata_overlapping, batch_size=64, shuffle=True)
+    # trained_net, epoch_losses = train_overlapping(train_loader, 20, 0.01)
+    # test_overlapping(test_loader, trained_net)
+    # plot_metrics(epoch_losses)
+    # Test: 0.05139
+
+    """Apply slide window to detect """
+    # Train a simple SVM
+    # train_data = np.load("./feature/train.npy", allow_pickle=True)
+    # train_X = train_data.item()['X']
+    # train_Y = train_data.item()['Y']
+    # test_data = np.load("./feature/test.npy", allow_pickle=True)
+    # test_X = test_data.item()['X']
+    # test_Y = test_data.item()['Y']
+    # clf = svm.SVC()
+    # clf.fit(train_X, train_Y)
+    # dump(clf, 'svm_classifier.joblib')
+
+    detect('./INRIAPerson/Test/pos/crop001638.png')
+
+    """Custom HOG and SVM"""
+    # model = custom_hog_svm()
+
+
 
