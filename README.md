@@ -13,3 +13,5 @@ In windowpreprocess.py, there are functions to extract features about the boundi
 Using these features, neural networks to predict the bounding box size or overlapping proportion can be trained from window_network.py
 
 With a trained classifier for person detection, function detect() from pyramid_img.py using slide windows can be used to detect persons on images of different sizes. 
+
+Also, notebook test_customhog.ipynb can be easily ran to train the SVM of custom extracted HOG features.
